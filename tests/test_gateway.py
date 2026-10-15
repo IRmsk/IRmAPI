@@ -85,16 +85,29 @@ def test_route_ark_when_model_has_doubao_and_key_set():
     assert resolve_provider_key("doubao-seed-1-6-lite-251015", cfg) == "doubao_ark"
 
 
-def test_route_doubao_web_explicit():
+def test_route_doubao_web_explicit(monkeypatch):
+    monkeypatch.setenv("ALLOW_WEB_PROVIDERS", "1")
     cfg = make_config()
     assert resolve_provider_key("doubao-web", cfg) == "doubao_web"
     assert resolve_provider_key("doubao-free", cfg) == "doubao_web"
 
 
-def test_route_doubao_web_default_when_no_ark_key():
+def test_route_doubao_web_explicit_disabled_by_default():
+    cfg = make_config()
+    with pytest.raises(RoutingError):
+        resolve_provider_key("doubao-web", cfg)
+
+
+def test_route_doubao_web_default_when_no_ark_key(monkeypatch):
+    monkeypatch.setenv("ALLOW_WEB_PROVIDERS", "1")
     cfg = make_config()
     assert resolve_provider_key("doubao", cfg) == "doubao_web"
     assert resolve_provider_key("随便的模型名", cfg) == "doubao_web"
+
+
+def test_route_unknown_model_prefers_ark():
+    cfg = make_config(ark_api_key="ark-key")
+    assert resolve_provider_key("随便的模型名", cfg) == "doubao_ark"
 
 
 def test_route_ark_raises_if_no_key():
@@ -109,10 +122,16 @@ def test_route_compat():
     assert resolve_provider_key("kimi-anything", cfg) == "openai_compat"
 
 
-def test_route_deepseek_web():
+def test_route_deepseek_web(monkeypatch):
+    monkeypatch.setenv("ALLOW_WEB_PROVIDERS", "1")
     cfg = make_config(deepseek_token="t")
     assert resolve_provider_key("deepseek-chat", cfg) == "deepseek_web"
     assert resolve_provider_key("deepseek-reasoner", cfg) == "deepseek_web"
+
+
+def test_route_deepseek_official_api_key():
+    cfg = make_config(deepseek_api_key="sk-xxx")
+    assert resolve_provider_key("deepseek-chat", cfg) == "deepseek_web"  # provider内部走官方API
 
 
 def test_route_deepseek_raises_without_cred():
@@ -126,8 +145,15 @@ def test_route_qwen_api():
     assert resolve_provider_key("qwen-turbo", cfg) == "qwen_api"
 
 
-def test_route_qwen_web_prefers_cookie():
+def test_route_qwen_official_priority():
+    """官方 API Key 优先于网页版 Cookie（反转后的默认行为）。"""
     cfg = make_config(qwen_api_key="k", qwen_cookies=["tongyi_sso_ticket=abc"])
+    assert resolve_provider_key("qwen-turbo", cfg) == "qwen_api"
+
+
+def test_route_qwen_web_when_no_api_key(monkeypatch):
+    monkeypatch.setenv("ALLOW_WEB_PROVIDERS", "1")
+    cfg = make_config(qwen_cookies=["tongyi_sso_ticket=abc"])
     assert resolve_provider_key("qwen-turbo", cfg) == "qwen_web"
 
 

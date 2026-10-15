@@ -164,7 +164,8 @@ def _make_deepseek_gateway(mock_url: str) -> TestClient:
     return TestClient(create_app(cfg))
 
 
-def test_deepseek_web_non_stream(mock_server_url):
+def test_deepseek_web_non_stream(mock_server_url, monkeypatch):
+    monkeypatch.setenv("ALLOW_WEB_PROVIDERS", "1")
     client = _make_deepseek_gateway(mock_server_url)
     resp = client.post(
         "/v1/chat/completions",
@@ -175,7 +176,8 @@ def test_deepseek_web_non_stream(mock_server_url):
     assert resp.json()["choices"][0]["message"]["content"] == "DS 回复"
 
 
-def test_deepseek_web_stream(mock_server_url):
+def test_deepseek_web_stream(mock_server_url, monkeypatch):
+    monkeypatch.setenv("ALLOW_WEB_PROVIDERS", "1")
     client = _make_deepseek_gateway(mock_server_url)
     with client.stream(
         "POST", "/v1/chat/completions",
@@ -224,7 +226,8 @@ def _make_qwen_web_gateway(mock_url: str) -> TestClient:
     return TestClient(create_app(cfg))
 
 
-def test_qwen_web_non_stream(mock_server_url):
+def test_qwen_web_non_stream(mock_server_url, monkeypatch):
+    monkeypatch.setenv("ALLOW_WEB_PROVIDERS", "1")
     client = _make_qwen_web_gateway(mock_server_url)
     resp = client.post(
         "/v1/chat/completions",
@@ -236,7 +239,8 @@ def test_qwen_web_non_stream(mock_server_url):
     assert data["choices"][0]["message"]["content"] == "千问 回复"
 
 
-def test_qwen_web_stream(mock_server_url):
+def test_qwen_web_stream(mock_server_url, monkeypatch):
+    monkeypatch.setenv("ALLOW_WEB_PROVIDERS", "1")
     client = _make_qwen_web_gateway(mock_server_url)
     with client.stream(
         "POST", "/v1/chat/completions",

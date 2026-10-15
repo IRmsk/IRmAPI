@@ -12,15 +12,16 @@ def resolve_provider_key(model: str, config: Config) -> str:
     """根据模型名解析出应使用的 provider key。
 
     规则（按优先级）：
-      1. ark-* / doubao-ark-*           -> doubao_ark（豆包官方方舟）
-      2. doubao-web* / doubao-free* / web-* -> doubao_web（豆包网页版免 Key）
-      3. doubao*                        -> doubao_ark（配了官方 key 优先）否则 doubao_web
-      4. deepseek-*                     -> deepseek_web（网页版免 Key / 官方 Key 兜底）
-      5. qwen-*                         -> qwen_web（网页版免 Key）否则 qwen_api（百炼官方）
+      1. ark-* / doubao-ark-*              -> doubao_ark（豆包官方方舟）
+      2. doubao-web* / doubao-free* / web-* -> doubao_web（需 ALLOW_WEB_PROVIDERS=1）
+      3. doubao*                           -> doubao_ark（官方优先）否则 doubao_web（需开 web）
+      4. deepseek-*                        -> 官方 API Key 优先；网页版需 ALLOW_WEB_PROVIDERS=1
+      5. qwen-*                            -> qwen_api（官方优先）；网页版需 ALLOW_WEB_PROVIDERS=1
       6. kimi-* / glm-* / moonshot-* / compat-* -> openai_compat（通用兼容上游）
-      7. 其它未知模型                   -> 默认豆包网页版
+      7. 其它未知模型                      -> 默认 doubao_ark（官方），不默认走网页版
     """
     m = model.lower()
+    web_ok = config.allow_web_providers
 
     # 方舟官方通道
     if m.startswith("ark-") or m.startswith("doubao-ark"):
@@ -28,8 +29,12 @@ def resolve_provider_key(model: str, config: Config) -> str:
             raise RoutingError("模型路由到 doubao_ark，但未配置 ARK_API_KEY")
         return "doubao_ark"
 
-    # 豆包网页版（免 Key）通道
+    # 豆包网页版（免 Key）通道——需显式开启
     if m.startswith("doubao-web") or m.startswith("doubao-free") or m.startswith("web-"):
+        if not web_ok:
+            raise RoutingError(
+                "网页版 provider 默认关闭。设 ALLOW_WEB_PROVIDERS=1 可启用（逆向网页版免 Key，违反平台 ToS）。"
+            )
         if not config.doubao_web_enabled:
             raise RoutingError(
                 "模型路由到 doubao_web，但未配置凭据：请设置 DOUBAO_COOKIE_1（完整 Cookie）"
@@ -37,31 +42,49 @@ def resolve_provider_key(model: str, config: Config) -> str:
             )
         return "doubao_web"
 
-    # 官方 key 可用时，普通 doubao 模型走官方（稳定、免费额度）
+    # 普通 doubao 模型：官方 API 优先，网页版兜底（需开启）
     if "doubao" in m:
         if config.ark_enabled:
             return "doubao_ark"
-        if config.doubao_web_enabled:
+        if web_ok and config.doubao_web_enabled:
             return "doubao_web"
+        if config.doubao_web_enabled:
+            raise RoutingError(
+                "未配置 ARK_API_KEY，网页版 provider 默认关闭。设 ALLOW_WEB_PROVIDERS=1 可启用。"
+            )
         raise RoutingError("未配置任何豆包凭据（ARK_API_KEY 或 DOUBAO_SESSIONIDS）")
 
-    # DeepSeek（网页版免 Key 优先；官方 Key 兜底）
+    # DeepSeek：官方 API Key 优先；只有网页版凭据时需开启 web
     if m.startswith("deepseek-"):
-        if not config.deepseek_enabled:
+        if config.deepseek_api_key:
+            return "deepseek_web"  # provider 内部会走官方 API 分支
+        if web_ok and config.deepseek_enabled:
+            return "deepseek_web"
+        if config.deepseek_enabled:
             raise RoutingError(
-                "模型路由到 deepseek_web，但未配置凭据：DEEPSEEK_COOKIE_1 / DEEPSEEK_TOKEN"
-                "（网页版免 Key）或 DEEPSEEK_API_KEY（官方）"
+                "DeepSeek 网页版 provider 默认关闭。设 ALLOW_WEB_PROVIDERS=1 可启用，"
+                "或配置 DEEPSEEK_API_KEY 走官方 API。"
             )
-        return "deepseek_web"
+        raise RoutingError(
+            "模型路由到 deepseek，但未配置凭据：DEEPSEEK_API_KEY（官方）或"
+            "DEEPSEEK_COOKIE_1 / DEEPSEEK_TOKEN（网页版，需 ALLOW_WEB_PROVIDERS=1）"
+        )
 
-    # 通义千问（网页版 Cookie 免 Key 优先；百炼官方 Key 兜底）
+    # 通义千问：官方 API 优先；网页版需开启
     if m.startswith("qwen-"):
-        if not config.qwen_enabled:
+        if config.qwen_api_key:
+            return "qwen_api"
+        if web_ok and config.qwen_cookies:
+            return "qwen_web"
+        if config.qwen_cookies:
             raise RoutingError(
-                "模型路由到 qwen 通道，但未配置凭据：QWEN_COOKIE_1（通义千问网页版，免 Key）"
-                "或 QWEN_API_KEY（阿里云百炼，官方免费额度）"
+                "通义千问网页版 provider 默认关闭。设 ALLOW_WEB_PROVIDERS=1 可启用，"
+                "或配置 QWEN_API_KEY 走官方 API。"
             )
-        return "qwen_web" if config.qwen_cookies else "qwen_api"
+        raise RoutingError(
+            "模型路由到 qwen，但未配置凭据：QWEN_API_KEY（官方）或"
+            "QWEN_COOKIE_1（网页版，需 ALLOW_WEB_PROVIDERS=1）"
+        )
 
     # 通用 OpenAI 兼容上游（Kimi / GLM / Moonshot / compat-* 等）
     if (
@@ -76,9 +99,11 @@ def resolve_provider_key(model: str, config: Config) -> str:
             )
         return "openai_compat"
 
-    # 未知模型名兜底：豆包网页版
-    if config.doubao_web_enabled:
-        return "doubao_web"
+    # 未知模型名兜底：优先官方方舟，不默认走网页版
     if config.ark_enabled:
         return "doubao_ark"
-    raise RoutingError("没有可用的模型通道，请先在 .env 配置豆包凭据")
+    if web_ok and config.doubao_web_enabled:
+        return "doubao_web"
+    raise RoutingError(
+        "没有可用的模型通道。请配置 ARK_API_KEY（官方），或设 ALLOW_WEB_PROVIDERS=1 并配置网页版凭据。"
+    )

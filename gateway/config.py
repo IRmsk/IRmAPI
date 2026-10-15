@@ -108,6 +108,16 @@ class Config:
         """通义千问通道可用：网页版 Cookie（免 Key）或百炼 API Key 任一即可。"""
         return bool(self.qwen_cookies or self.qwen_api_key)
 
+    @property
+    def allow_web_providers(self) -> bool:
+        """是否允许使用网页版（逆向免 Key）provider。默认关闭，需显式 ALLOW_WEB_PROVIDERS=1。"""
+        return os.getenv("ALLOW_WEB_PROVIDERS", "0") == "1"
+
+    @property
+    def deepseek_official_only(self) -> bool:
+        """DeepSeek 只有官方 API Key（无网页版凭据）。"""
+        return bool(self.deepseek_api_key) and not (self.deepseek_cookies or self.deepseek_token)
+
 
 def load_config() -> Config:
     cfg = Config()
