@@ -305,6 +305,11 @@ def main() -> None:
     import uvicorn
 
     cfg = _app_state["config"]
+    # 安全检查：AUTHORIZATION 为空时拒绝启动（防止公开暴露网关）
+    if not cfg.authorization:
+        log.error("安全拦截：AUTHORIZATION 为空，拒绝启动")
+        log.error("    请在 .env 中设置 AUTHORIZATION=your-secret-key")
+        raise SystemExit(1)
     enabled = [
         name
         for name, flag in [

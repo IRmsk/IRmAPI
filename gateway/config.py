@@ -30,7 +30,7 @@ def _env(key: str, default: str = "") -> str:
 @dataclass
 class Config:
     # 服务
-    host: str = field(default_factory=lambda: _env("HOST", "0.0.0.0"))
+    host: str = field(default_factory=lambda: _env("HOST", "127.0.0.1"))
     port: int = field(default_factory=lambda: int(_env("PORT", "5005")))
     authorization: list[str] = field(default_factory=lambda: _split_csv(_env("AUTHORIZATION")))
     # 控制台访问口令（可选；设置了则打开 /console 需要输入）
