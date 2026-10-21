@@ -30,7 +30,12 @@ def resource_path(rel: str) -> str:
 def run_gateway(host: str, port: int) -> None:
     """后台线程里跑 FastAPI 网关。"""
     import uvicorn
-    from server import app
+    from server import app, _app_state
+    # 安全检查：AUTHORIZATION 为空时拒绝启动
+    cfg = _app_state.get("config")
+    if cfg and not cfg.authorization:
+        print("安全拦截：AUTHORIZATION 为空，拒绝启动")
+        return
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 
